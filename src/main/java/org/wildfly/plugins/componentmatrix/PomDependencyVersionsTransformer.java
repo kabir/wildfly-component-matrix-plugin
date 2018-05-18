@@ -23,11 +23,13 @@
 
 package org.wildfly.plugins.componentmatrix;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
@@ -35,15 +37,39 @@ import org.apache.maven.model.Model;
 
 class PomDependencyVersionsTransformer {
 
+    private static class VersionRegistry {
+        // groupId -> artifactId -> versions
+        Map<String, Map<String, Set<String>>> versionsByGroupAndArtifact= new TreeMap<>();
+        // groupId -> version -> artifactId
+        //Map<String, Map<String, Set<String>>> artifactIdsByGroupAndVersion = new HashMap<>();
+
+        void addDependency(Dependency dependency) {
+            Map<String, Set<String>> versionsByArtifact = versionsByGroupAndArtifact.get(dependency.getGroupId());
+            if (versionsByArtifact == null) {
+                versionsByArtifact = new TreeMap<>();
+                versionsByGroupAndArtifact.put(dependency.getGroupId(), versionsByArtifact);
+            }
+            Set<String> versions = versionsByArtifact.get(dependency.getArtifactId());
+            if (versions == null) {
+                versions = new TreeSet<>();
+                versionsByArtifact.put(dependency.getArtifactId(), versions);
+            }
+            versions.add(dependency.getVersion());
+        }
+    }
 
     public Model transformPomModel(Model model) {
         Model pomModel = model.clone();
         DependencyManagement depMgmt = pomModel.getDependencyManagement();
+
+        VersionRegistry registry = new VersionRegistry();
+
         Map<String, String> groupIdArtifactIdVersions = new TreeMap<>();
         Map<String, String> groupIdArtifactIdPropertyNames = new TreeMap<>();
         Map<String, String> groupIdVersions = new TreeMap<>();
         Map<String, Set<String>> groupIdArtifactIds = new TreeMap<>();
         for (Dependency dependency : depMgmt.getDependencies()) {
+            registry.addDependency(dependency);
             String groupId = dependency.getGroupId();
             String artifactId = dependency.getArtifactId();
             String groupIdArtifactId = groupId + ":" + artifactId;
